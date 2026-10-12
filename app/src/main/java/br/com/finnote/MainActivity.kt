@@ -45,7 +45,7 @@ private class Store(a:MainActivity){
 class MainActivity:ComponentActivity(){
  private lateinit var store:Store
  private var shortcut by mutableStateOf(false)
- override fun onCreate(b:Bundle?){super.onCreate(b);store=Store(this);shortcut=intent?.action=="br.com.finnote.ACTION_VOICE_ENTRY";setContent{MaterialTheme(colorScheme=lightColorScheme(primary=Green,background=Bg)){App(store,::speak);LaunchedEffect(shortcut){if(shortcut){kotlinx.coroutines.delay(450);shortcut=false;speak()}}}}
+ override fun onCreate(b:Bundle?){super.onCreate(b);store=Store(this);shortcut=intent?.action=="br.com.finnote.ACTION_VOICE_ENTRY";setContent{MaterialTheme(colorScheme=lightColorScheme(primary=Green,background=Bg)){App(store,::speak);LaunchedEffect(shortcut){if(shortcut){kotlinx.coroutines.delay(450);shortcut=false;speak()}}}}}
  override fun onNewIntent(i:Intent){super.onNewIntent(i);setIntent(i);shortcut=i.action=="br.com.finnote.ACTION_VOICE_ENTRY"}
  private fun speak(){val i=Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply{putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);putExtra(RecognizerIntent.EXTRA_LANGUAGE,"pt-BR");putExtra(RecognizerIntent.EXTRA_PROMPT,"Diga o que comprou e o valor")};runCatching{startActivityForResult(i,71)}.onFailure{android.widget.Toast.makeText(this,"Reconhecimento de voz indisponível",1).show()}}
  @Deprecated("Android speech result callback") override fun onActivityResult(r:Int,c:Int,d:Intent?){super.onActivityResult(r,c,d);if(r==71&&c==RESULT_OK)pending=d?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()}
