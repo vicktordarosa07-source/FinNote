@@ -1,5 +1,9 @@
 # FinNote
 
+[![Baixar APK](https://img.shields.io/badge/Download-APK-brightgreen?logo=android)](https://github.com/vicktordarosa07-source/FinNote/releases/latest/download/FinNote.apk)
+
+[⬇ Baixar FinNote para Android](https://github.com/vicktordarosa07-source/FinNote/releases/latest/download/FinNote.apk)
+
 App Android nativo para registro financeiro local.
 
 ## Recursos
@@ -14,3 +18,4 @@ Os dados ficam neste aparelho. Esta versão ainda não implementa autenticação
 
 ## Build
 Abra a pasta no Android Studio e use **Build > Build APK(s)**. O GitHub Actions também compila o APK de debug em cada push e publica o arquivo como artefato da execução. Para distribuição, configure uma assinatura de release.
+
