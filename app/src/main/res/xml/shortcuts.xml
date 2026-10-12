@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android"><shortcut android:shortcutId="voice-entry" android:enabled="true" android:icon="@drawable/ic_mic" android:shortcutShortLabel="Falar gasto" android:shortcutLongLabel="Adicionar gasto por voz"><intent android:action="br.com.finnote.ACTION_VOICE_ENTRY" android:targetPackage="br.com.finnote" android:targetClass="br.com.finnote.MainActivity"/></shortcut></shortcuts>
