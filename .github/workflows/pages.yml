@@ -22,15 +22,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+          run_install: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.25.0
-          run_install: false
       - name: Install dependencies
         working-directory: web
         run: pnpm install --frozen-lockfile
