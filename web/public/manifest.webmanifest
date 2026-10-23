@@ -1,0 +1,19 @@
+{
+  "id": ".",
+  "name": "FinNote — Caderno financeiro",
+  "short_name": "FinNote",
+  "description": "Controle financeiro pessoal e compartilhado.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#075b46",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Falar gasto", "short_name": "Falar gasto", "description": "Dite um gasto para registrar", "url": "./?action=voice", "icons": [{ "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml" }] },
+    { "name": "Novo lançamento", "short_name": "Novo lançamento", "description": "Registrar um gasto ou uma renda", "url": "./?action=new-entry", "icons": [{ "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml" }] }
+  ]
+}

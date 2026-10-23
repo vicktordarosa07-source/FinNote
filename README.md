@@ -1,10 +1,25 @@
 # FinNote
 
+[![Abrir FinNote Web](https://img.shields.io/badge/FinNote-Web%20App-075b46?logo=pwa)](https://vicktordarosa07-source.github.io/FinNote/)
 [![Baixar APK](https://img.shields.io/badge/Download-APK-brightgreen?logo=android)](https://github.com/vicktordarosa07-source/FinNote/releases/latest/download/FinNote.apk)
 
 [⬇ Baixar FinNote para Android](https://github.com/vicktordarosa07-source/FinNote/releases/latest/download/FinNote.apk)
 
-App Android nativo para controle financeiro pessoal e compartilhado.
+🌐 [Abrir FinNote Web](https://vicktordarosa07-source.github.io/FinNote/) · ⬇ [Baixar FinNote para Android](https://github.com/vicktordarosa07-source/FinNote/releases/latest/download/FinNote.apk)
+
+## FinNote Web e instalação PWA
+
+A versão web é responsiva e pode ser instalada como aplicativo em navegadores compatíveis. Abra [FinNote Web](https://vicktordarosa07-source.github.io/FinNote/) em HTTPS e use **Instalar app**. No iPhone/iPad, use **Compartilhar > Adicionar à Tela de Início** no Safari. O app guarda os lançamentos localmente e abre offline depois da primeira visita; login e compartilhamento público entre contas exigem configurar o Supabase abaixo em **Ajustes**.
+
+Para executar localmente:
+
+```sh
+cd web
+pnpm install
+pnpm dev
+```
+
+O GitHub Actions publica automaticamente `web/` no GitHub Pages a cada alteração da aplicação web.
 
 ## Recursos
 - Categorias e subcategorias personalizáveis, incluindo Gastos fixos, Transporte e Mercado.
