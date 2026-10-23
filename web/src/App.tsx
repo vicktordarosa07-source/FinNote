@@ -207,7 +207,7 @@ function Dashboard({ db, month, setMonth, entries, income, expense, recent, onAd
   const byCategory = aggregate(entries.filter((entry) => entry.type === 'expense'), (entry) => entry.subcategory ? `${entry.category} · ${entry.subcategory}` : entry.category).slice(0, 5)
   const byProduct = aggregate(entries.filter((entry) => entry.type === 'expense'), (entry) => entry.product || entry.title).slice(0, 5)
   const previous = comparison[comparison.length - 2]
-  const delta = previous ? percentChange(balance, previous.income - previous.expense) : null
+  const delta = previous && (db.entries.length > 0 || db.profile.monthlyIncomeCents > 0) ? percentChange(balance, previous.income - previous.expense) : null
   return <>
     <div className="page-heading dashboard-month"><h1 className="sr-only">Visão geral</h1><label className="month-picker"><CalendarDays size={16} /><input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label></div>
     <section className="summary-grid" aria-label="Resumo financeiro">
@@ -256,7 +256,7 @@ function aggregate(entries: Entry[], key: (entry: Entry) => string) {
 }
 
 function MonthlyChart({ data }: { data: ReturnType<typeof getComparison> }) {
-  const maximum = Math.max(1, ...data.flatMap((item) => [item.income, item.expense]))
+  const maximum = Math.max(100, ...data.flatMap((item) => [item.income, item.expense]))
   const height = 184
   return <div className="chart-wrap"><div className="y-axis"><span>{formatAxis(maximum)}</span><span>{formatAxis(maximum / 2)}</span><span>R$ 0</span></div><div className="chart-content"><div className="grid-lines"><i /><i /><i /></div><div className="bar-list">{data.map((item) => <div className="month-bar-set" key={item.month}><div className="bars" style={{ height }}><span className="bar income-bar" style={{ height: `${item.income ? Math.max(3, item.income / maximum * 100) : 0}%` }} title={`Entradas: ${formatMoney(item.income)}`} /><span className="bar expense-bar" style={{ height: `${item.expense ? Math.max(3, item.expense / maximum * 100) : 0}%` }} title={`Saídas: ${formatMoney(item.expense)}`} /></div><small>{monthLabel(item.month, true).replace('.', '')}</small></div>)}</div></div></div>
 }
