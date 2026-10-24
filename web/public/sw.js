@@ -1,4 +1,4 @@
-const CACHE = 'finnote-shell-v1'
+const CACHE = 'finnote-shell-premium-v2'
 const scopeUrl = new URL(self.registration.scope)
 const appRoot = scopeUrl.pathname
 const shell = [appRoot, `${appRoot}index.html`, `${appRoot}manifest.webmanifest`, `${appRoot}icon.svg`]
