@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ArrowDownRight, ArrowLeftRight, ArrowUpRight, CalendarDays, Check, ChevronDown,
-  CircleHelp, Download, Globe2, Home, LockKeyhole, LogOut, Mic, Plus, Search, Settings,
+  CircleHelp, Download, Globe2, Home, Leaf, LockKeyhole, LogOut, Mic, Plus, Search, Settings,
   Tag, Wallet, X,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -152,16 +152,17 @@ export default function App() {
   const installControls = { available: installPrompt.available, installed: installPrompt.installed, onInstall: installApp }
   return <div className="app-shell">
     <aside className="sidebar">
-      <a className="brand" href="#inicio" onClick={() => setSection('Visão geral')} aria-label="FinNote, início"><span className="brand-mark"><Wallet size={21} strokeWidth={2.35} /></span><span>Fin<span>Note</span></span></a>
+      <a className="brand" href="#inicio" onClick={() => setSection('Visão geral')} aria-label="FinNote, início"><span className="brand-mark"><Leaf size={21} strokeWidth={2.35} /></span><span>Fin<span>Note</span></span></a>
       <nav className="side-nav" aria-label="Navegação principal">
         {navItems.map(({ label, icon: Icon }) => <button key={label} className={`nav-link ${section === label ? 'selected' : ''}`} onClick={() => setSection(label)}><Icon size={18} strokeWidth={2} /><span>{label}</span></button>)}
       </nav>
+      <div className="sidebar-insight"><Leaf size={23}/><strong>Disciplina hoje, mais liberdade amanhã.</strong><small>Um passo por vez na sua vida financeira.</small></div>
       <div className="sidebar-bottom"><div className="connection-state"><span className={`state-dot ${db.session ? 'online' : ''}`} /><span>{db.session ? 'Conta conectada' : 'Dados neste aparelho'}</span></div><button className="profile-mini" onClick={() => setSection('Ajustes')}><span className="avatar">{(db.profile.name || '?').slice(0, 1).toUpperCase()}</span><span className="profile-mini-copy"><strong>{db.profile.name || 'Seu perfil'}</strong><small>{db.profile.phone || 'Configurar conta'}</small></span><ChevronDown size={15} /></button></div>
     </aside>
 
     <main className="workspace">
       <header className="topbar">
-        <div className="mobile-brand"><span className="brand-mark"><Wallet size={19} /></span><strong>Fin<span>Note</span></strong></div>
+        <div className="mobile-brand"><span className="brand-mark"><Leaf size={19} /></span><strong>Fin<span>Note</span></strong></div>
           <label className="search-box"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar lançamentos, categorias..." aria-label="Buscar lançamentos" /></label>
         <div className="topbar-actions">
           <button className="voice-top-button" onClick={recordVoice} aria-label="Adicionar lançamento por voz"><Mic size={17} /></button>
@@ -171,7 +172,7 @@ export default function App() {
       </header>
 
       <div className="page-wrap">
-        {section === 'Visão geral' && <Dashboard db={db} month={month} setMonth={setMonth} entries={monthEntries} income={incomeTotal} expense={expenses} recent={recentEntries} onAdd={() => openEntry('expense')} onViewAll={() => setSection('Lançamentos')} />}
+        {section === 'Visão geral' && <Dashboard db={db} month={month} setMonth={setMonth} entries={monthEntries} income={incomeTotal} expense={expenses} recent={recentEntries} onAdd={() => openEntry('expense')} onVoice={recordVoice} onViewAll={() => setSection('Lançamentos')} />}
         {section === 'Lançamentos' && <Transactions entries={db.entries.filter((entry) => matchesSearch(entry, query))} onAdd={() => openEntry('expense')} />}
         {section === 'Categorias' && <Categories categories={db.categories} addCategory={() => setModal('category')} addSubcategory={setSubCategoryFor} />}
         {section === 'Ajustes' && <SettingsPage db={db} update={update} api={api} busy={busy} setBusy={setBusy} showMessage={setMessage} installControls={installControls} onSync={refreshData} />}
@@ -199,32 +200,39 @@ function matchesSearch(entry: Entry, query: string) {
   return !term || [entry.title, entry.product, entry.category, entry.subcategory, entry.author].some((value) => value.toLocaleLowerCase('pt-BR').includes(term))
 }
 
-function Dashboard({ db, month, setMonth, entries, income, expense, recent, onAdd, onViewAll }: {
-  db: Database; month: string; setMonth: (value: string) => void; entries: Entry[]; income: number; expense: number; recent: Entry[]; onAdd: () => void; onViewAll: () => void
+function Dashboard({ db, month, setMonth, entries, income, expense, recent, onAdd, onVoice, onViewAll }: {
+  db: Database; month: string; setMonth: (value: string) => void; entries: Entry[]; income: number; expense: number; recent: Entry[]; onAdd: () => void; onVoice: () => void; onViewAll: () => void
 }) {
   const balance = income - expense
-  const comparison = getComparison(db)
+  const comparison = getComparison(db, month)
   const byCategory = aggregate(entries.filter((entry) => entry.type === 'expense'), (entry) => entry.subcategory ? `${entry.category} · ${entry.subcategory}` : entry.category).slice(0, 5)
   const byProduct = aggregate(entries.filter((entry) => entry.type === 'expense'), (entry) => entry.product || entry.title).slice(0, 5)
   const previous = comparison[comparison.length - 2]
   const delta = previous && (db.entries.length > 0 || db.profile.monthlyIncomeCents > 0) ? percentChange(balance, previous.income - previous.expense) : null
-  return <>
-    <div className="page-heading dashboard-month"><h1 className="sr-only">Visão geral</h1><label className="month-picker"><CalendarDays size={16} /><input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label></div>
+  const savingsRate = income > 0 ? Math.max(0, Math.min(100, Math.round(balance / income * 100))) : 0
+  const greeting = db.profile.name.trim() ? 'Olá, ' + db.profile.name.trim().split(/\s+/)[0] : 'Bem-vindo ao FinNote'
+  return <div className="dashboard-page">
+    <div className="dashboard-heading">
+      <div className="dashboard-intro"><span className="eyebrow">VISÃO GERAL</span><h1>{greeting}</h1><p>Acompanhe suas finanças com clareza e tranquilidade.</p></div>
+      <div className="dashboard-controls"><label className="month-picker"><CalendarDays size={16} /><input aria-label="Selecionar mês" type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label>
+      <div className="dashboard-actions"><button className="button button-outline" onClick={onVoice}><Mic size={16}/>Falar gasto</button><button className="button button-dark" onClick={onAdd}><Plus size={17}/>Novo lançamento</button></div></div>
+    </div>
     <section className="summary-grid" aria-label="Resumo financeiro">
       <article className="balance-card"><div className="balance-content"><span className="overline">Saldo do mês</span><strong>{formatMoney(balance)}</strong><span className={`balance-delta ${delta !== null && delta >= 0 ? 'positive' : ''}`}>{delta === null ? 'Comece adicionando seus lançamentos' : `${delta >= 0 ? '↗' : '↘'} ${Math.abs(delta)}% em relação a ${monthLabel(previous!.month, true)}`}</span></div><MiniBars data={comparison.map((item) => item.expense)} /></article>
       <MetricCard label="Entradas" amount={income} compare={income - (previous?.income ?? 0)} icon={<ArrowUpRight size={19} />} type="income" />
       <MetricCard label="Saídas" amount={expense} compare={expense - (previous?.expense ?? 0)} icon={<ArrowDownRight size={19} />} type="expense" />
+      <article className="savings-card" aria-label={'Disponível para guardar: ' + formatMoney(Math.max(0,balance))}><div className="savings-info"><span>Disponível para guardar</span><strong>{formatMoney(Math.max(0,balance))}</strong><small>{income > 0 ? 'Proporção das entradas do mês' : 'Registre entradas para calcular'}</small></div><div className="savings-ring" aria-hidden="true" style={{background:'conic-gradient(#169767 '+savingsRate+'%, #e6f1e9 0)'}}><span>{income > 0 ? savingsRate+'%' : '—'}</span></div></article>
     </section>
     <section className="analytics-grid">
       <article className="panel monthly-panel"><div className="panel-heading"><h2>Comparativo mensal</h2><div className="legend"><span><i className="legend-in" />Entradas</span><span><i className="legend-out" />Saídas</span></div></div><MonthlyChart data={comparison} /></article>
       <RankingPanel title="Gastos por categoria" data={byCategory} empty="Ainda não há gastos por categoria neste mês." />
       <RankingPanel title="Gastos por produto" data={byProduct} empty="Cadastre produtos nos lançamentos para comparar." />
     </section>
-    <section className="panel recent-panel"><div className="panel-heading"><div><h2>Recentes</h2><p>Seus lançamentos mais recentes</p></div><button className="button button-dark button-sm" onClick={onAdd}><Plus size={16} />Adicionar lançamento</button></div>
+    <section className="panel recent-panel"><div className="panel-heading"><div><h2>Lançamentos recentes</h2><p>Movimentações registradas</p></div><button className="button button-dark button-sm" onClick={onAdd}><Plus size={16} />Adicionar lançamento</button></div>
       {recent.length ? <EntryTable entries={recent} /> : <EmptyState icon={<ArrowLeftRight size={20} />} title="Seu caderno começa aqui" detail="Registre um gasto ou renda para acompanhar seu mês." action="Adicionar lançamento" onAction={onAdd} />}
       {recent.length > 0 && <button className="view-all" onClick={onViewAll}>Ver todos os lançamentos <ArrowUpRight size={14} /></button>}
     </section>
-  </>
+  </div>
 }
 
 function MetricCard({ label, amount, compare, icon, type }: { label: string; amount: number; compare: number; icon: ReactNode; type: 'income' | 'expense' }) {
@@ -234,8 +242,8 @@ function MetricCard({ label, amount, compare, icon, type }: { label: string; amo
   return <article className="metric-card"><span className={`metric-icon ${type}`}>{icon}</span><div className="metric-info"><span>{label}</span><strong>{formatMoney(amount)}</strong><small className={favorable ? 'trend-up' : 'trend-down'}>{compare === 0 ? 'Sem alteração' : `${compare > 0 ? '+' : '−'}${Math.abs(delta)}%`} <em>vs. mês anterior</em></small></div></article>
 }
 
-function getComparison(db: Database) {
-  const now = new Date(`${currentMonth()}-15T12:00:00`)
+function getComparison(db: Database, selectedMonth = currentMonth()) {
+  const now = new Date(`${selectedMonth}-15T12:00:00`)
   return Array.from({ length: 6 }, (_, index) => {
     const date = new Date(now); date.setMonth(now.getMonth() - (5 - index))
     const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
@@ -275,11 +283,13 @@ function RankingPanel({ title, data, empty }: { title: string; data: Array<{ nam
 function Transactions({ entries, onAdd }: { entries: Entry[]; onAdd: () => void }) {
   const [filter, setFilter] = useState<'all' | Visibility>('all')
   const visible = entries.filter((entry) => filter === 'all' || entry.visibility === filter)
-  return <><div className="page-heading"><div><h1>Lançamentos</h1><p>Entradas e gastos em ordem cronológica.</p></div><button className="button button-dark" onClick={onAdd}><Plus size={16} />Novo lançamento</button></div><div className="filter-row">{(['all', 'public', 'private'] as const).map((value) => <button key={value} className={`filter-chip ${filter === value ? 'chosen' : ''}`} onClick={() => setFilter(value)}>{value === 'all' ? 'Todos' : value === 'public' ? 'Públicos' : 'Privados'}</button>)}</div><section className="panel transaction-page">{visible.length ? <EntryTable entries={visible} /> : <EmptyState icon={<ArrowLeftRight size={20} />} title="Nenhum lançamento ainda" detail="Adicione uma entrada ou gasto para começar." action="Novo lançamento" onAction={onAdd} />}</section></>
+  return <><div className="page-heading"><div><h1>Lançamentos</h1><p>Entradas e gastos em ordem cronológica.</p></div><button className="button button-dark" onClick={onAdd}><Plus size={16} />Novo lançamento</button></div><div className="filter-row">{(['all', 'public', 'private'] as const).map((value) => <button key={value} className={`filter-chip ${filter === value ? 'chosen' : ''}`} onClick={() => setFilter(value)}>{value === 'all' ? 'Todos' : value === 'public' ? 'Compartilhados' : 'Privados'}</button>)}</div><section className="panel transaction-page">{visible.length ? <EntryTable entries={visible} /> : <EmptyState icon={<ArrowLeftRight size={20} />} title="Nenhum lançamento ainda" detail="Adicione uma entrada ou gasto para começar." action="Novo lançamento" onAction={onAdd} />}</section></>
 }
 
 function EntryTable({ entries }: { entries: Entry[] }) {
-  return <div className="table-scroll"><table className="entry-table"><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Produto</th><th>Valor</th><th>Autor</th><th>Visibilidade</th></tr></thead><tbody>{entries.map((entry) => <tr key={entry.id}><td>{new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(new Date(entry.createdAt))}</td><td><span className={`entry-symbol ${entry.type}`}>{entry.type === 'income' ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}</span><strong>{entry.title}</strong></td><td>{entry.category}{entry.subcategory && <small className="cell-sub">{entry.subcategory}</small>}</td><td>{entry.product || '—'}</td><td className={`amount ${entry.type}`}>{entry.type === 'income' ? '+' : '−'} {formatMoney(entry.amountCents)}</td><td>{entry.author}</td><td><span className={`visibility ${entry.visibility}`}>{entry.visibility === 'public' ? <Globe2 size={12} /> : <LockKeyhole size={12} />}{entry.visibility === 'public' ? 'Público' : 'Privado'}</span></td></tr>)}</tbody></table></div>
+  return <><div className="table-scroll"><table className="entry-table"><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Produto</th><th>Valor</th><th>Autor</th><th>Visibilidade</th></tr></thead><tbody>{entries.map((entry) => <tr key={entry.id}><td>{new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(new Date(entry.createdAt))}</td><td><span className={`entry-symbol ${entry.type}`}>{entry.type === 'income' ? <ArrowUpRight size={15} /> : <ArrowDownRight size={15} />}</span><strong>{entry.title}</strong></td><td>{entry.category}{entry.subcategory && <small className="cell-sub">{entry.subcategory}</small>}</td><td>{entry.product || '—'}</td><td className={`amount ${entry.type}`}>{entry.type === 'income' ? '+' : '−'} {formatMoney(entry.amountCents)}</td><td>{entry.author}</td><td><span className={`visibility ${entry.visibility}`}>{entry.visibility === 'public' ? <Globe2 size={12} /> : <LockKeyhole size={12} />}{entry.visibility === 'public' ? 'Público' : 'Privado'}</span></td></tr>)}</tbody></table></div>
+    <div className="entry-card-list" aria-label="Lançamentos">{entries.map((entry) => <article key={entry.id} className="entry-card"><span className={'entry-card-icon '+entry.type}>{entry.type === 'income' ? <ArrowUpRight size={18}/> : <ArrowDownRight size={18}/>}</span><div className="entry-card-main"><strong>{entry.title}</strong><small>{entry.category} · {new Intl.DateTimeFormat('pt-BR',{day:'2-digit',month:'short'}).format(new Date(entry.createdAt))} · {entry.visibility === 'public' ? 'Compartilhado' : 'Privado'}</small></div><span className={'entry-card-amount '+entry.type}>{entry.type === 'income' ? '+' : '−'} {formatMoney(entry.amountCents)}</span></article>)}</div>
+  </>
 }
 
 function Categories({ categories, addCategory, addSubcategory }: { categories: Category[]; addCategory: () => void; addSubcategory: (category: Category) => void }) {
