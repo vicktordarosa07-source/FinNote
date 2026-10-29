@@ -38,8 +38,8 @@ export const initialDatabase: Database = {
   categories: initialCategories,
   entries: [],
   profile: { name: '', phone: '', monthlyIncomeCents: 0 },
-  supabaseUrl: '',
-  supabaseKey: '',
+  supabaseUrl: import.meta.env.VITE_SUPABASE_URL ?? '',
+  supabaseKey: import.meta.env.VITE_SUPABASE_ANON_KEY ?? '',
   session: null,
 }
 
@@ -49,7 +49,14 @@ export function loadDatabase(): Database {
     const stored = localStorage.getItem(storageKey)
     if (!stored) return initialDatabase
     const parsed = JSON.parse(stored) as Partial<Database>
-    return { ...initialDatabase, ...parsed, categories: parsed.categories?.length ? parsed.categories : initialCategories, entries: parsed.entries ?? [], profile: { ...initialDatabase.profile, ...parsed.profile } }
+    return {
+      ...initialDatabase, ...parsed,
+      supabaseUrl: parsed.supabaseUrl || initialDatabase.supabaseUrl,
+      supabaseKey: parsed.supabaseKey || initialDatabase.supabaseKey,
+      categories: parsed.categories?.length ? parsed.categories : initialCategories,
+      entries: parsed.entries ?? [],
+      profile: { ...initialDatabase.profile, ...parsed.profile },
+    }
   } catch { return initialDatabase }
 }
 export function saveDatabase(database: Database) { localStorage.setItem(storageKey, JSON.stringify(database)) }

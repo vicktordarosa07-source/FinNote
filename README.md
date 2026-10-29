@@ -25,7 +25,7 @@ A Vercel está conectada ao repositório GitHub, com `web/` como diretório raiz
 - Categorias e subcategorias personalizáveis, incluindo Gastos fixos, Transporte e Mercado.
 - Lançamentos públicos para usuários conectados e lançamentos privados locais.
 - Dashboard com comparativo dos últimos seis meses e gráficos por categoria e produto.
-- Cadastro por nome e telefone, autenticação por SMS e convites de conexão por link.
+- Cadastro por nome e telefone, senha com confirmação, verificação por SMS e convites por link.
 - Renda mensal fixa, rendas extras, entradas, saídas e saldo do mês.
 - Ditado pt-BR com sugestão de categoria e revisão antes de salvar.
 - Sessão e telefone protegidos com Android Keystore.
@@ -33,19 +33,20 @@ A Vercel está conectada ao repositório GitHub, com `web/` como diretório raiz
 
 ## Configuração do compartilhamento
 
-O compartilhamento requer um projeto Supabase (não há credenciais de produção neste repositório):
+O compartilhamento e o login por telefone/senha requerem um projeto Supabase. Não há credenciais de produção neste repositório:
 
-1. No Supabase, habilite autenticação por telefone e configure um provedor de SMS.
+1. No Supabase, habilite autenticação por telefone e senha e configure um provedor de SMS para confirmar novos telefones.
 2. Execute [`supabase/schema.sql`](supabase/schema.sql) no SQL Editor do projeto.
-3. No app, em **Ajustes**, informe a URL do projeto e a chave `anon`/`publishable` (nunca use uma service-role key no APK).
-4. Cadastre o nome e o telefone internacional (por exemplo, `+5511999999999`) e valide o código recebido por SMS.
-5. Toque em **Criar link** e envie o convite. A outra pessoa precisa instalar o FinNote, entrar com o próprio telefone e aceitar o link.
+3. Para publicar com configuração compartilhada, adicione `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` às variáveis do projeto Vercel e faça um novo deploy. Elas são públicas no navegador; **nunca** use uma chave `service_role` no frontend ou APK.
+4. Se essas variáveis não estiverem no deploy, a tela inicial permite informar a URL e a chave pública no próprio dispositivo.
+5. Crie uma conta com nome, telefone internacional (por exemplo, `+5511999999999`), senha e confirmação. Se a confirmação de telefone estiver ativa, informe o código recebido por SMS.
+6. Toque em **Criar link** e envie o convite. A outra pessoa precisa entrar com a própria conta e aceitar o link.
 
 As políticas RLS do SQL permitem que uma conta leia os próprios lançamentos e os lançamentos públicos das contas conectadas. Lançamentos privados nunca são enviados pelo app. Lançamentos públicos registrados offline ficam pendentes no aparelho e são enviados na próxima sincronização.
 
 ## Limitações
 
-O login e o compartilhamento ficam inativos até a configuração do Supabase e do provedor de SMS. A sincronização é acionada ao entrar, ao salvar um lançamento público e pelo botão **Sincronizar**; não há sincronização em tempo real. Categorias/subcategorias são armazenadas no aparelho e não são compartilhadas. O comparativo repete a renda fixa configurada nos meses anteriores, pois o app não mantém histórico de alteração salarial. O reconhecimento de voz depende do serviço de fala habilitado no Android. No menu que aparece ao manter o ícone pressionado, toque em **Falar gasto**.
+O login e o compartilhamento ficam inativos até a configuração do Supabase e, conforme as opções do projeto, do provedor de SMS. Telefones podem ser reciclados pelas operadoras; considere ativar MFA para contas em produção. A sincronização é acionada ao entrar, ao salvar um lançamento público e pelo botão **Sincronizar**; não há sincronização em tempo real. Categorias/subcategorias são armazenadas no aparelho e não são compartilhadas. O comparativo repete a renda fixa configurada nos meses anteriores, pois o app não mantém histórico de alteração salarial. O reconhecimento de voz depende do serviço de fala habilitado no Android. No menu que aparece ao manter o ícone pressionado, toque em **Falar gasto**.
 
 ## Build
 Abra a pasta no Android Studio e use **Build > Build APK(s)**. O GitHub Actions compila o APK de debug em cada push e publica o arquivo como artefato da execução. O APK do botão de download é assinado para depuração; distribuição final exige assinatura de release.

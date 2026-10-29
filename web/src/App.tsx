@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ArrowDownRight, ArrowLeftRight, ArrowUpRight, CalendarDays, Check, ChevronDown,
-  CircleHelp, Download, Globe2, Home, Leaf, LockKeyhole, LogOut, Mic, Plus, Search, Settings,
-  Tag, Wallet, X,
+  CircleHelp, Download, Eye, EyeOff, Globe2, Home, Leaf, LockKeyhole, LogOut, Mic, Plus, Search, Settings,
+  ShieldCheck, Tag, Wallet, X,
 } from 'lucide-react'
-import type { ReactNode } from 'react'
+import type { FormEvent, ReactNode } from 'react'
 import {
   amountFromSpeech, formatMoney, loadDatabase, parseMoney, saveDatabase,
   suggestCategory, type Category, type Database, type Entry, type EntryType, type Session, type Visibility,
@@ -62,6 +62,7 @@ export default function App() {
   const [draft, setDraft] = useState<Partial<Entry>>({})
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
+  const [authSkipped, setAuthSkipped] = useState(false)
   const installPrompt = useInstallPrompt()
   const update = useCallback((patch: Partial<Database>) => setDb((previous) => ({ ...previous, ...patch })), [])
   const api = useMemo(() => new SupabaseApi(db, (session: Session) => update({ session })), [db, update])
@@ -150,6 +151,17 @@ export default function App() {
   }
 
   const installControls = { available: installPrompt.available, installed: installPrompt.installed, onInstall: installApp }
+  const finishAuthentication = async (session: Session, phone: string, name: string) => {
+    const profile = { ...db.profile, name, phone }
+    const authenticated: Database = { ...db, session, profile }
+    update({ session, profile })
+    setAuthSkipped(false)
+    setBusy(true)
+    try { update({ entries: await new SupabaseApi(authenticated, (value) => update({ session: value })).sync() }); setMessage('Conta conectada. Lançamentos públicos sincronizados.') }
+    catch (error) { setMessage(`Conta conectada. Sincronização: ${(error as Error).message}`) }
+    finally { setBusy(false) }
+  }
+  if (!db.session && !authSkipped) return <AuthPage database={db} update={update} onContinueOffline={() => setAuthSkipped(true)} onAuthenticated={finishAuthentication} />
   return <div className="app-shell">
     <aside className="sidebar">
       <a className="brand" href="#inicio" onClick={() => setSection('Visão geral')} aria-label="FinNote, início"><span className="brand-mark"><Leaf size={21} strokeWidth={2.35} /></span><span>Fin<span>Note</span></span></a>
@@ -167,6 +179,7 @@ export default function App() {
         <div className="topbar-actions">
           <button className="voice-top-button" onClick={recordVoice} aria-label="Adicionar lançamento por voz"><Mic size={17} /></button>
           {installControls.installed ? <span className="installed-state"><Check size={15} /> Instalado</span> : <button className="install-button" onClick={installControls.onInstall}><Download size={16} /> Instalar app</button>}
+          {!db.session && <button className="button button-outline auth-open-button" onClick={() => setAuthSkipped(false)}>Entrar</button>}
           <button className="avatar top-avatar" onClick={() => setSection('Ajustes')} aria-label="Abrir ajustes do perfil">{(db.profile.name || '?').slice(0, 1).toUpperCase()}</button>
         </div>
       </header>
@@ -175,7 +188,7 @@ export default function App() {
         {section === 'Visão geral' && <Dashboard db={db} month={month} setMonth={setMonth} entries={monthEntries} income={incomeTotal} expense={expenses} recent={recentEntries} onAdd={() => openEntry('expense')} onVoice={recordVoice} onViewAll={() => setSection('Lançamentos')} />}
         {section === 'Lançamentos' && <Transactions entries={db.entries.filter((entry) => matchesSearch(entry, query))} onAdd={() => openEntry('expense')} />}
         {section === 'Categorias' && <Categories categories={db.categories} addCategory={() => setModal('category')} addSubcategory={setSubCategoryFor} />}
-        {section === 'Ajustes' && <SettingsPage db={db} update={update} api={api} busy={busy} setBusy={setBusy} showMessage={setMessage} installControls={installControls} onSync={refreshData} />}
+        {section === 'Ajustes' && <SettingsPage db={db} update={update} api={api} busy={busy} setBusy={setBusy} showMessage={setMessage} installControls={installControls} onSync={refreshData} onAuth={() => setAuthSkipped(false)} />}
       </div>
     </main>
 
@@ -193,6 +206,126 @@ export default function App() {
     {message && <Toast message={message} busy={busy} close={() => setMessage('')} />}
     {busy && !message && <div className="busy-pill"><span className="spinner" /> Sincronizando</div>}
   </div>
+}
+
+function normalizeAuthPhone(value: string) {
+  const digits = value.replace(/\D/g, '')
+  const withCountryCode = digits.length === 10 || digits.length === 11 ? `55${digits}` : digits
+  return `+${withCountryCode}`
+}
+
+function AuthPage({ database, update, onContinueOffline, onAuthenticated }: {
+  database: Database
+  update: (patch: Partial<Database>) => void
+  onContinueOffline: () => void
+  onAuthenticated: (session: Session, phone: string, name: string) => Promise<void>
+}) {
+  const [mode, setMode] = useState<'login' | 'signup'>('login')
+  const [step, setStep] = useState<'credentials' | 'verify'>('credentials')
+  const [name, setName] = useState(database.profile.name)
+  const [phone, setPhone] = useState(database.profile.phone)
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [code, setCode] = useState('')
+  const [url, setUrl] = useState(database.supabaseUrl)
+  const [key, setKey] = useState(database.supabaseKey)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfig, setShowConfig] = useState(!database.supabaseUrl || !database.supabaseKey)
+  const [busy, setBusy] = useState(false)
+  const [feedback, setFeedback] = useState('')
+  const [error, setError] = useState('')
+  const configured = Boolean(database.supabaseUrl.trim() && database.supabaseKey.trim())
+  const normalizedPhone = normalizeAuthPhone(phone)
+
+  const saveConfig = () => {
+    const cleanUrl = url.trim().replace(/\/$/, '')
+    if (!/^https:\/\//i.test(cleanUrl) || !key.trim()) { setError('Informe a URL HTTPS e a chave pública do Supabase.'); return }
+    update({ supabaseUrl: cleanUrl, supabaseKey: key.trim() })
+    setError('')
+    setFeedback('Configuração salva neste dispositivo.')
+  }
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setError(''); setFeedback('')
+    if (!configured) { setShowConfig(true); setError('Configure o Supabase para continuar com uma conta.'); return }
+    if (!/^\+\d{8,15}$/.test(normalizedPhone)) { setError('Informe um telefone com DDD e código do país, como +55 11 99999-9999.'); return }
+    if (step === 'verify') {
+      if (!/^\d{6}$/.test(code.trim())) { setError('Digite o código de 6 números recebido por SMS.'); return }
+      setBusy(true)
+      try {
+        const profile = { ...database.profile, name: name.trim(), phone: normalizedPhone }
+        const session = await new SupabaseApi({ ...database, profile }, (value) => update({ session: value })).verifyPhoneSignup(normalizedPhone, code.trim(), name.trim())
+        await onAuthenticated(session, normalizedPhone, name.trim())
+      } catch (requestError) { setError((requestError as Error).message) }
+      finally { setBusy(false) }
+      return
+    }
+    if (mode === 'signup') {
+      if (name.trim().length < 2) { setError('Digite seu nome completo ou como quer ser identificado.'); return }
+      if (password.length < 8) { setError('A senha precisa ter pelo menos 8 caracteres.'); return }
+      if (password !== confirmPassword) { setError('As senhas não coincidem.'); return }
+    } else if (!password) { setError('Digite sua senha.'); return }
+    const profile = { ...database.profile, name: mode === 'signup' ? name.trim() : database.profile.name, phone: normalizedPhone }
+    const next = { ...database, profile }
+    update({ profile })
+    setBusy(true)
+    try {
+      const api = new SupabaseApi(next, (value) => update({ session: value }))
+      if (mode === 'signup') {
+        const session = await api.signUpWithPassword(normalizedPhone, password, name.trim())
+        if (session) await onAuthenticated(session, normalizedPhone, name.trim())
+        else { setStep('verify'); setFeedback('Enviamos um código para confirmar seu telefone. Ele expira em breve.') }
+      } else {
+        const result = await api.signInWithPassword(normalizedPhone, password)
+        await onAuthenticated(result.session, normalizedPhone, result.name)
+      }
+    } catch (requestError) { setError((requestError as Error).message) }
+    finally { setBusy(false) }
+  }
+
+  const resendCode = async () => {
+    setBusy(true); setError(''); setFeedback('')
+    try { await new SupabaseApi(database, (value) => update({ session: value })).resendPhoneSignupCode(normalizedPhone); setFeedback('Novo código enviado.') }
+    catch (requestError) { setError((requestError as Error).message) }
+    finally { setBusy(false) }
+  }
+
+  return <main className="auth-page">
+    <section className="auth-story" aria-label="FinNote">
+      <a className="auth-brand" href="#inicio"><span className="auth-brand-mark"><Wallet size={21} /></span><span>Fin<span>Note</span></span></a>
+      <div className="auth-story-copy"><span className="auth-story-line" /><h1>Mais clareza para cuidar do seu dinheiro.</h1><p>Suas contas, seus planos e seus próximos passos em um só lugar.</p></div>
+      <div className="auth-art" aria-hidden="true"><div className="auth-art-ring ring-one" /><div className="auth-art-ring ring-two" /><div className="auth-art-leaf"><Wallet size={42} strokeWidth={1.35} /></div><div className="auth-art-chip chip-one"><span className="auth-chip-dot" /> Gastos organizados</div><div className="auth-art-chip chip-two"><ShieldCheck size={15} /> Privado por padrão</div></div>
+      <p className="auth-story-foot">Organize em privado. Compartilhe quando quiser.</p>
+    </section>
+
+    <section className="auth-panel">
+      <div className="auth-panel-top"><span>FinNote para você</span><button type="button" className="auth-text-link" onClick={onContinueOffline}>Usar sem conta</button></div>
+      <div className="auth-form-wrap">
+        <div className="auth-form-heading"><span className="auth-security"><ShieldCheck size={17} /> Acesso seguro</span><h2>{step === 'verify' ? 'Confirme seu telefone' : mode === 'signup' ? 'Crie sua conta' : 'Bem-vindo de volta'}</h2><p>{step === 'verify' ? `Digite o código enviado para ${normalizedPhone}.` : mode === 'signup' ? 'Comece a organizar suas finanças com segurança.' : 'Entre para acessar seus lançamentos compartilhados.'}</p></div>
+
+        {step === 'credentials' && <div className="auth-tabs" role="tablist" aria-label="Acesso à conta"><button type="button" role="tab" aria-selected={mode === 'login'} className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError(''); setFeedback('') }}>Entrar</button><button type="button" role="tab" aria-selected={mode === 'signup'} className={mode === 'signup' ? 'active' : ''} onClick={() => { setMode('signup'); setError(''); setFeedback('') }}>Criar conta</button></div>}
+
+        <form className="auth-form" onSubmit={submit}>
+          {step === 'verify' ? <Field label="Código de confirmação"><input autoComplete="one-time-code" inputMode="numeric" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000" /></Field> : <>
+            {mode === 'signup' && <Field label="Nome"><input autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Seu nome" /></Field>}
+            <Field label="Telefone"><input autoComplete="tel" inputMode="tel" type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+55 (11) 99999-9999" /></Field>
+            <Field label="Senha"><span className="auth-password"><input autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={mode === 'signup' ? 'Mínimo de 8 caracteres' : 'Digite sua senha'} /><button type="button" aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'} onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button></span></Field>
+            {mode === 'signup' && <Field label="Confirmar senha"><input autoComplete="new-password" type={showPassword ? 'text' : 'password'} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Digite a senha novamente" /></Field>}
+          </>}
+          {error && <p className="auth-feedback error" role="alert">{error}</p>}
+          {feedback && <p className="auth-feedback success" role="status">{feedback}</p>}
+          {!configured && <p className="auth-config-warning"><CircleHelp size={15} /> O acesso compartilhado precisa da configuração do Supabase.</p>}
+          <button className="button button-dark auth-submit" disabled={busy || !configured}>{busy ? <><span className="spinner" /> Aguarde…</> : step === 'verify' ? 'Confirmar telefone' : mode === 'signup' ? 'Criar conta' : 'Entrar'}{!busy && <ArrowUpRight size={17} />}</button>
+          {step === 'verify' && <button type="button" className="auth-text-link auth-resend" onClick={resendCode} disabled={busy}>Não recebeu? Enviar outro código</button>}
+        </form>
+
+        {step === 'credentials' && <details className="auth-config" open={showConfig} onToggle={(event) => setShowConfig(event.currentTarget.open)}><summary>{configured ? 'Configuração do Supabase' : 'Configurar acesso compartilhado'}<ChevronDown size={15} /></summary><div className="auth-config-fields"><Field label="URL do projeto Supabase"><input type="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://seuprojeto.supabase.co" autoComplete="url" /></Field><Field label="Chave pública (anon/publishable)"><input type="password" value={key} onChange={(event) => setKey(event.target.value)} placeholder="Chave pública do projeto" autoComplete="off" /></Field><button type="button" className="button button-outline" onClick={saveConfig}>Salvar configuração neste aparelho</button></div></details>}
+        <div className="auth-privacy"><LockKeyhole size={14} /><span>Seus lançamentos privados continuam só neste dispositivo.</span></div>
+      </div>
+      <footer className="auth-footer">© {new Date().getFullYear()} FinNote <span>·</span> Feito para sua vida real</footer>
+    </section>
+  </main>
 }
 
 function matchesSearch(entry: Entry, query: string) {
@@ -296,8 +429,8 @@ function Categories({ categories, addCategory, addSubcategory }: { categories: C
   return <><div className="page-heading"><div><h1>Categorias</h1><p>Organize cada lançamento do seu jeito.</p></div><button className="button button-dark" onClick={addCategory}><Plus size={16} />Nova categoria</button></div><div className="category-list">{categories.map((category, index) => <article className="category-row" key={category.id}><div className={`category-icon icon-${index % 5}`}><Tag size={19} /></div><div className="category-detail"><h2>{category.name}</h2><p>{category.subcategories.length ? category.subcategories.join(' · ') : 'Sem subcategorias'}</p></div><button className="button button-outline button-sm" onClick={() => addSubcategory(category)}><Plus size={15} />Subcategoria</button></article>)}</div></>
 }
 
-function SettingsPage({ db, update, api, busy, setBusy, showMessage, installControls, onSync }: {
-  db: Database; update: (patch: Partial<Database>) => void; api: SupabaseApi; busy: boolean; setBusy: (value: boolean) => void; showMessage: (value: string) => void; installControls: { available: boolean; installed: boolean; onInstall: () => void }; onSync: () => void
+function SettingsPage({ db, update, api, busy, setBusy, showMessage, installControls, onSync, onAuth }: {
+  db: Database; update: (patch: Partial<Database>) => void; api: SupabaseApi; busy: boolean; setBusy: (value: boolean) => void; showMessage: (value: string) => void; installControls: { available: boolean; installed: boolean; onInstall: () => void }; onSync: () => void; onAuth: () => void
 }) {
   const [name, setName] = useState(db.profile.name)
   const [phone, setPhone] = useState(db.profile.phone)
@@ -305,32 +438,12 @@ function SettingsPage({ db, update, api, busy, setBusy, showMessage, installCont
   const [url, setUrl] = useState(db.supabaseUrl)
   const [key, setKey] = useState(db.supabaseKey)
   const [code, setCode] = useState('')
-  const [sent, setSent] = useState(false)
 
   const saveProfile = () => {
     update({ profile: { name: name.trim(), phone: phone.trim(), monthlyIncomeCents: parseMoney(income) } })
     showMessage('Perfil e rendimento mensal salvos.')
   }
   const saveBackend = () => { update({ supabaseUrl: url.trim().replace(/\/$/, ''), supabaseKey: key.trim() }); showMessage('Configuração do compartilhamento salva neste navegador.') }
-  const sendOtp = async () => {
-    const next: Database = { ...db, supabaseUrl: url.trim().replace(/\/$/, ''), supabaseKey: key.trim(), profile: { name: name.trim(), phone: phone.trim(), monthlyIncomeCents: parseMoney(income) } }
-    update(next)
-    setBusy(true)
-    try { await new SupabaseApi(next, (session) => update({ session })).sendOtp(phone.trim()); setSent(true); showMessage(`Código enviado para ${phone.trim()}.`) }
-    catch (error) { showMessage((error as Error).message) }
-    finally { setBusy(false) }
-  }
-  const verify = async () => {
-    const next: Database = { ...db, supabaseUrl: url.trim().replace(/\/$/, ''), supabaseKey: key.trim(), profile: { name: name.trim(), phone: phone.trim(), monthlyIncomeCents: parseMoney(income) } }
-    update(next); setBusy(true)
-    try {
-      const session = await new SupabaseApi(next, (value) => update({ session: value })).verifyOtp(phone.trim(), code.trim())
-      const authenticated: Database = { ...next, session }
-      const entries = await new SupabaseApi(authenticated, (value) => update({ session: value })).sync()
-      update({ session, entries }); setSent(false); setCode(''); showMessage('Login confirmado. Dados públicos sincronizados.')
-    } catch (error) { showMessage((error as Error).message) }
-    finally { setBusy(false) }
-  }
   const shareInvite = async () => {
     setBusy(true)
     try {
@@ -356,7 +469,7 @@ function SettingsPage({ db, update, api, busy, setBusy, showMessage, installCont
       <section className="panel settings-panel"><div className="settings-title"><span className="settings-icon"><Globe2 size={19} /></span><div><h2>Conexão e compartilhamento</h2><p>{db.session ? `Conectado · ${db.profile.phone}` : 'Entrar para sincronizar lançamentos públicos.'}</p></div></div>
         <div className="form-grid"><Field label="URL do projeto Supabase"><input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://projeto.supabase.co" /></Field><Field label="Chave anon/public"><input value={key} onChange={(event) => setKey(event.target.value)} placeholder="Chave pública do projeto" type="password" /></Field></div>
         <div className="button-row"><button className="button button-outline" onClick={saveBackend}>Salvar configuração</button>{db.session && <button className="button button-outline" onClick={onSync} disabled={busy}>Sincronizar agora</button>}</div>
-        {!db.session ? <div className="login-block">{sent ? <><Field label="Código recebido por SMS"><input value={code} onChange={(event) => setCode(event.target.value)} inputMode="numeric" placeholder="000000" /></Field><button className="button button-dark" onClick={verify} disabled={busy || !code.trim()}>{busy ? 'Verificando…' : 'Confirmar telefone'}</button><button className="text-button" onClick={() => setSent(false)}>Voltar</button></> : <button className="button button-dark" onClick={sendOtp} disabled={busy || !url || !key || !phone}>{busy ? 'Enviando…' : 'Entrar com código SMS'}</button>}</div> : <div className="connection-actions"><button className="button button-dark" onClick={shareInvite} disabled={busy}><Globe2 size={16} />Criar link de conexão</button><Field label="Aceitar convite com link ou código"><input value={code} onChange={(event) => setCode(event.target.value)} placeholder="Cole aqui o link recebido" /></Field><button className="button button-outline" onClick={acceptInvite} disabled={busy || !code.trim()}>Conectar usuário</button><button className="text-button sign-out" onClick={() => update({ session: null })}><LogOut size={15} />Sair da conta</button></div>}
+        {!db.session ? <div className="login-block"><button className="button button-dark" onClick={onAuth}>Entrar ou criar conta</button><span className="settings-note">Entre com telefone e senha para compartilhar lançamentos.</span></div> : <div className="connection-actions"><button className="button button-dark" onClick={shareInvite} disabled={busy}><Globe2 size={16} />Criar link de conexão</button><Field label="Aceitar convite com link ou código"><input value={code} onChange={(event) => setCode(event.target.value)} placeholder="Cole aqui o link recebido" /></Field><button className="button button-outline" onClick={acceptInvite} disabled={busy || !code.trim()}>Conectar usuário</button><button className="text-button sign-out" onClick={() => update({ session: null })}><LogOut size={15} />Sair da conta</button></div>}
         <p className="settings-note"><CircleHelp size={15} /> O compartilhamento usa SMS do Supabase e exige executar <code>supabase/schema.sql</code> no seu projeto. Lançamentos privados não são enviados.</p>
       </section>
       <section className="panel settings-panel install-panel"><div className="settings-title"><span className="settings-icon"><Download size={19} /></span><div><h2>Instalar no dispositivo</h2><p>Abra o FinNote como um aplicativo, mesmo quando não estiver conectado.</p></div></div><button className="button button-outline" onClick={installControls.onInstall}>{installControls.installed ? <><Check size={16} />Aplicativo instalado</> : <><Download size={16} />Instalar FinNote</>}</button><span className="settings-note">Funciona em dispositivos compatíveis quando o site está publicado em HTTPS.</span></section>

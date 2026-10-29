@@ -23,19 +23,63 @@ export class SupabaseApi {
     return text
   }
 
-  async sendOtp(phone: string) {
-    await this.request('/auth/v1/otp', { method: 'POST', body: JSON.stringify({ phone, create_user: true }) }, this.database.supabaseKey, false)
+  private sessionFrom(data: Record<string, unknown>): Session {
+    const user = data.user as Record<string, unknown> | undefined
+    const accessToken = data.access_token
+    const refreshToken = data.refresh_token
+    const userId = user?.id
+    if (typeof accessToken !== 'string' || typeof refreshToken !== 'string' || typeof userId !== 'string') {
+      throw new Error('O serviço de autenticação não retornou uma sessão válida.')
+    }
+    return { accessToken, refreshToken, userId }
   }
 
-  async verifyOtp(phone: string, code: string): Promise<Session> {
-    const data = JSON.parse(await this.request('/auth/v1/verify', { method: 'POST', body: JSON.stringify({ phone, token: code, type: 'sms' }) }, this.database.supabaseKey, false))
-    const session = { accessToken: data.access_token as string, refreshToken: data.refresh_token as string, userId: data.user.id as string }
-    this.onSession(session)
+  private async persistProfile(session: Session, phone: string, name: string) {
     await this.request('/rest/v1/profiles?on_conflict=id', {
       method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' },
-      body: JSON.stringify({ id: session.userId, name: this.database.profile.name || 'Pessoa', phone }),
+      body: JSON.stringify({ id: session.userId, name: name.trim() || 'Pessoa', phone }),
     }, session.accessToken)
+  }
+
+  async signUpWithPassword(phone: string, password: string, name: string): Promise<Session | null> {
+    const data = JSON.parse(await this.request('/auth/v1/signup', {
+      method: 'POST', body: JSON.stringify({ phone, password, data: { name: name.trim() } }),
+    }, this.database.supabaseKey, false)) as Record<string, unknown>
+    if (!data.access_token) return null
+    const session = this.sessionFrom(data)
+    this.onSession(session)
+    await this.persistProfile(session, phone, name)
     return session
+  }
+
+  async signInWithPassword(phone: string, password: string): Promise<{ session: Session; name: string }> {
+    const data = JSON.parse(await this.request('/auth/v1/token?grant_type=password', {
+      method: 'POST', body: JSON.stringify({ phone, password }),
+    }, this.database.supabaseKey, false)) as Record<string, unknown>
+    const session = this.sessionFrom(data)
+    this.onSession(session)
+    const rows = JSON.parse(await this.request(`/rest/v1/profiles?select=name&id=eq.${encodeURIComponent(session.userId)}&limit=1`, {}, session.accessToken)) as Array<{ name?: string }>
+    const user = data.user as Record<string, unknown> | undefined
+    const metadata = user?.user_metadata as Record<string, unknown> | undefined
+    const name = rows[0]?.name || (typeof metadata?.name === 'string' ? metadata.name : '') || this.database.profile.name || 'Pessoa'
+    await this.persistProfile(session, phone, name)
+    return { session, name }
+  }
+
+  async verifyPhoneSignup(phone: string, code: string, name: string): Promise<Session> {
+    const data = JSON.parse(await this.request('/auth/v1/verify', {
+      method: 'POST', body: JSON.stringify({ phone, token: code, type: 'sms' }),
+    }, this.database.supabaseKey, false)) as Record<string, unknown>
+    const session = this.sessionFrom(data)
+    this.onSession(session)
+    await this.persistProfile(session, phone, name)
+    return session
+  }
+
+  async resendPhoneSignupCode(phone: string) {
+    await this.request('/auth/v1/resend', {
+      method: 'POST', body: JSON.stringify({ phone, type: 'signup', channel: 'sms' }),
+    }, this.database.supabaseKey, false)
   }
 
   private async refresh(): Promise<Session> {
